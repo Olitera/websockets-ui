@@ -1,3 +1,5 @@
+import exp from 'constants';
+
 export interface IPlayerData {
   type: string,
   data: IPlayerLogin,
@@ -8,3 +10,4 @@ export interface IPlayerLogin {
   name: string,
   password: string
 }
+
