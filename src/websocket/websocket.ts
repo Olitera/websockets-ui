@@ -33,6 +33,20 @@ function registerPlayer(ws: WebSocket, data: IPlayerLogin) {
       data: responseData,
     id: 0,
   }
+  updateWinners(ws, data)
+  ws.send(JSON.stringify(response))
+}
+
+function updateWinners(ws: WebSocket, data: IPlayerLogin) {
+  const responseData = JSON.stringify({
+    name: data.name,
+    wins: 1
+  },)
+  const response = {
+    type: "update_winners",
+    data: responseData,
+    id: 0,
+  }
   ws.send(JSON.stringify(response))
 }
 
