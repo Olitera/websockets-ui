@@ -1,9 +1,11 @@
 import { WebSocketServer, WebSocket } from 'ws'
 import { IPlayerLogin } from '../interfaces/player-data';
 import { IRoomIndex } from '../interfaces/room-data';
+import { IGameShips } from '../interfaces/ships-data';
 
-const wss = new WebSocketServer({port: 3000})
-const players: IPlayerLogin[] = []
+const wss = new WebSocketServer({port: 3000});
+const players: IPlayerLogin[] = [];
+const rooms: IRoomIndex[] = []
 
 wss.on('connection', (ws) => {
   ws.on('message', (data: string) => {
@@ -23,6 +25,9 @@ wss.on('connection', (ws) => {
         break
       case 'add_user_to_room':
         updateRoom(ws, requestData.data);
+        break
+      case 'add_ships':
+        addShips(ws, requestData.data);
         break
       default:
         break
@@ -60,8 +65,9 @@ function updateWinners(ws: WebSocket, data: IPlayerLogin) {
 }
 
 function createRoom(ws: WebSocket, data: IRoomIndex) {
+  rooms.push(data)
   const responseData = JSON.stringify({
-    idGame: 1,
+    idGame: rooms.length - 1,
     idPlayer: data.indexRoom
   })
   const response = {
@@ -90,6 +96,30 @@ function updateRoom(ws: WebSocket, userData: IPlayerLogin) {
     id: 0,
   }
   ws.send(JSON.stringify(response))
+}
+
+function addShips(ws: WebSocket, data: IGameShips) {
+  const responseData = JSON.stringify({
+    ships:
+      [
+        {
+          position: {
+            x: 1,
+            y: 1,
+          },
+          direction: true,
+          length: 1,
+          type: "small",
+        }
+      ],
+    currentPlayerIndex: 1
+  })
+  const response = {
+    type: "start_game",
+    data: responseData,
+    id: 0,
+  }
+  ws.send(JSON.stringify(response));
 }
 
 wss.on('listening', () => {
