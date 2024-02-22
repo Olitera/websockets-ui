@@ -1,11 +1,11 @@
 import { WebSocketServer, WebSocket } from 'ws'
 import { IPlayerLogin } from '../interfaces/player-data';
 import { IRoomIndex } from '../interfaces/room-data';
-import { IGameShips } from '../interfaces/ships-data';
+import { IAttack, IGameShips } from '../interfaces/ships-data';
 
 const wss = new WebSocketServer({port: 3000});
 const players: IPlayerLogin[] = [];
-const rooms: IRoomIndex[] = []
+const rooms: IRoomIndex[] = [];
 
 wss.on('connection', (ws) => {
   ws.on('message', (data: string) => {
@@ -25,9 +25,13 @@ wss.on('connection', (ws) => {
         break
       case 'add_user_to_room':
         updateRoom(ws, requestData.data);
+        createRoom(ws, requestData.data);
         break
       case 'add_ships':
         addShips(ws, requestData.data);
+        break
+      case 'attack':
+        attack(ws, requestData.data);
         break
       default:
         break
@@ -79,23 +83,15 @@ function createRoom(ws: WebSocket, data: IRoomIndex) {
 }
 
 function updateRoom(ws: WebSocket, userData: IPlayerLogin) {
-  const responseData = JSON.stringify(
-    [ {
-      roomId: 1,
-      roomUsers: [
-        {
-          name: userData.name,
-          index: 1
-        }
-      ]
-    }]
-  )
+  const responseData = JSON.stringify(rooms)
   const response = {
     type: "update_room",
     data: responseData,
     id: 0,
   }
-  ws.send(JSON.stringify(response))
+  wss.clients.forEach((ws) => {
+    ws.send(JSON.stringify(response))
+  })
 }
 
 function addShips(ws: WebSocket, data: IGameShips) {
@@ -116,6 +112,23 @@ function addShips(ws: WebSocket, data: IGameShips) {
   })
   const response = {
     type: "start_game",
+    data: responseData,
+    id: 0,
+  }
+  ws.send(JSON.stringify(response));
+}
+
+function attack(ws: WebSocket, data: IAttack) {
+  const responseData = JSON.stringify({
+    position: {
+      x: data.x,
+      y: data.y,
+    },
+    currentPlayer: data.indexPlayer,
+    status: "miss"
+  })
+  const response = {
+    type: "attack",
     data: responseData,
     id: 0,
   }
