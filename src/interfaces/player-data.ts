@@ -6,6 +6,7 @@ export interface IPlayerData {
 
 export interface IPlayerLogin {
   name: string,
-  password: string
+  password: string,
+  id: number
 }
 

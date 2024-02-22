@@ -1,3 +1,5 @@
+import { IPlayerLogin } from '../interfaces/player-data';
+
 export interface IRoomData {
   type: string,
   data: string,
@@ -11,5 +13,17 @@ export interface IUserToRoom {
 }
 
 export interface IRoomIndex {
-  indexRoom: number
+  indexRoom: number,
+  users: { id: number }[]
+}
+
+export interface IRoom {
+  roomId: number,
+  roomUsers:
+    [
+      {
+        name: string,
+        index: number,
+      }
+    ],
 }
