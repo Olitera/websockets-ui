@@ -1,5 +1,3 @@
-import { IPlayerLogin } from '../interfaces/player-data';
-
 export interface IRoomData {
   type: string,
   data: string,

@@ -2,11 +2,12 @@ import { WebSocketServer, WebSocket } from 'ws'
 import { IPlayerLogin } from '../interfaces/player-data';
 import { IRoom, IRoomIndex } from '../interfaces/room-data';
 import { IAttack, IGameShips } from '../interfaces/ships-data';
+import { IGamePlayer, IGamesData } from '../interfaces/games-data';
 
 const wss = new WebSocketServer({port: 3000});
-const players: IPlayerLogin[] = [];
+const users: IPlayerLogin[] = [];
 const rooms: IRoom[] = [];
-const games = [];
+const games: IGamesData[] = [];
 const wins = [];
 let id = 0;
 
@@ -30,7 +31,7 @@ wss.on('connection', (ws) => {
         break
       case 'add_user_to_room':
         updateRoom();
-        createGame(ws, JSON.parse(requestData.data), userId);
+        createGame(JSON.parse(requestData.data), userId);
         break
       case 'add_ships':
         addShips(ws, requestData.data);
@@ -46,7 +47,7 @@ wss.on('connection', (ws) => {
 
 function registerPlayer(ws: WebSocket, data: IPlayerLogin, userId: number) {
   data.id = userId;
-  players.push(data)
+  users.push(data)
   const responseData = JSON.stringify({
     name: data.name,
     index: data.id,
@@ -74,12 +75,13 @@ function updateWinners(ws: WebSocket, data: IPlayerLogin) {
   ws.send(JSON.stringify(response))
 }
 
-function createGame(ws: WebSocket, data: IRoomIndex, userId: number) {
-  // data.users.push({id: userId })
-  // rooms.push(data);
+function createGame(data: IRoomIndex, userId: number) {
+  const players: IGamePlayer[] = rooms.find((room => room.roomId === data.indexRoom))?.roomUsers
+    .map((p)=> ({playerId: p.index, ships: []})) as IGamePlayer[]
   games.push({
-    idGame: games.length + 1,
-    idPlayer: data.indexRoom
+    gameId: games.length + 1,
+    players,
+    currentPlayer: userId
   })
   const responseData = JSON.stringify({
     idGame: games.length - 1,
@@ -90,11 +92,13 @@ function createGame(ws: WebSocket, data: IRoomIndex, userId: number) {
     data: responseData,
     id: 0,
   }
-  ws.send(JSON.stringify(response))
+  wss.clients.forEach((ws) => {
+    ws.send(JSON.stringify(response))
+  })
 }
 
 function createRoom(userId: number) {
-  const name = players.find(((player)=> player.id === userId))?.name as string;
+  const name = users.find(((player)=> player.id === userId))?.name as string;
   const room: IRoom = {
     roomId: rooms.length + 1, roomUsers: [{ index: userId, name }]
   }
