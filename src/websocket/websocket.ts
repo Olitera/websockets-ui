@@ -3,38 +3,45 @@ import { IPlayerLogin } from '../interfaces/player-data';
 import { IRoom, IRoomIndex } from '../interfaces/room-data';
 import { IAttack, IGameShips } from '../interfaces/ships-data';
 import { IGamePlayer, IGamesData } from '../interfaces/games-data';
+import { IWinsData } from '../interfaces/wins-data';
 
 const wss = new WebSocketServer({port: 3000});
 const users: IPlayerLogin[] = [];
 const rooms: IRoom[] = [];
 const games: IGamesData[] = [];
-const wins = [];
+const wins: IWinsData[] = [];
 let id = 0;
+const wsMap: Map<number, WebSocket> = new Map();
 
 wss.on('connection', (ws) => {
-  const userId = id + 1;
+  console.log("CONNECTION")
+  id = id + 1;
+  const userId = id;
+  wsMap.set(userId, ws);
   ws.on('message', (data: string) => {
-    console.log(JSON.parse(data))
+    console.log(userId, '@createRoom');
+    // console.log(JSON.parse(data))
 
     const requestData = JSON.parse(data.toString())
-    console.log(requestData, '@@@@@@@@@@@')
+    // console.log(requestData, '@@@@@@@@@@@')
 
     switch (requestData.type) {
       case 'reg':
         registerPlayer(ws, JSON.parse(requestData.data), userId);
         updateRoom()
-        updateWinners(ws, requestData.data);
+        updateWinners();
         break;
       case 'create_room':
         createRoom(userId);
         updateRoom();
         break
       case 'add_user_to_room':
+        addUserToRoom(JSON.parse(requestData.data), userId)
         updateRoom();
         createGame(JSON.parse(requestData.data), userId);
         break
       case 'add_ships':
-        addShips(ws, requestData.data);
+        addShips(JSON.parse(requestData.data));
         break
       case 'attack':
         attack(ws, requestData.data);
@@ -62,17 +69,16 @@ function registerPlayer(ws: WebSocket, data: IPlayerLogin, userId: number) {
   ws.send(JSON.stringify(response))
 }
 
-function updateWinners(ws: WebSocket, data: IPlayerLogin) {
-  const responseData = JSON.stringify({
-    name: data.name,
-    wins: 1
-  })
+function updateWinners() {
+  const responseData = JSON.stringify(wins)
   const response = {
     type: "update_winners",
     data: responseData,
     id: 0,
   }
-  ws.send(JSON.stringify(response))
+  wss.clients.forEach((ws) => {
+    ws.send(JSON.stringify(response))
+  })
 }
 
 function createGame(data: IRoomIndex, userId: number) {
@@ -83,17 +89,18 @@ function createGame(data: IRoomIndex, userId: number) {
     players,
     currentPlayer: userId
   })
-  const responseData = JSON.stringify({
-    idGame: games.length - 1,
-    idPlayer: data.indexRoom
-  })
-  const response = {
-    type: "create_game",
-    data: responseData,
-    id: 0,
-  }
-  wss.clients.forEach((ws) => {
-    ws.send(JSON.stringify(response))
+  console.log(games, '@games');
+  players.forEach(p=> {
+    const responseData = JSON.stringify({
+      idGame: games.length,
+      idPlayer: p.playerId
+    })
+    const response = {
+      type: "create_game",
+      data: responseData,
+      id: 0,
+    }
+    wsMap.get(p.playerId)?.send(JSON.stringify(response))
   })
 }
 
@@ -112,33 +119,48 @@ function updateRoom() {
     data: responseData,
     id: 0,
   }
+  console.log(JSON.stringify(rooms), '@ROOMS')
   wss.clients.forEach((ws) => {
     ws.send(JSON.stringify(response))
   })
 }
 
-function addShips(ws: WebSocket, data: IGameShips) {
-  const responseData = JSON.stringify({
-    ships:
-      [
-        {
-          position: {
-            x: 1,
-            y: 1,
-          },
-          direction: true,
-          length: 1,
-          type: "small",
-        }
-      ],
-    currentPlayerIndex: 1
-  })
-  const response = {
-    type: "start_game",
-    data: responseData,
-    id: 0,
+function addUserToRoom(data: IRoomIndex, userId: number) {
+ const user = users.find(u => u.id === userId) as IPlayerLogin;
+ const room = rooms.find(r => r.roomId === data.indexRoom) as IRoom;
+ if (!room.roomUsers.find(u => u.index === userId)){
+   room.roomUsers.push({name: user.name, index: user.id})
+ }
+ console.log(JSON.stringify(room), userId, '@addUserToRoom')
+}
+
+function addShips(data: IGameShips) {
+  const game = games.find((g) => g.gameId === data.gameId) as IGamesData;
+  // console.log(game, data, games, '@@@@@game')
+  const player = game.players.find(p => p.playerId === data.indexPlayer) as IGamePlayer;
+  player.ships = data.ships;
+  console.log(data.indexPlayer, JSON.stringify(player), '@ GAME player')
+
+  if(game.players.every(p => {
+    return p.ships.length;})) {
+    startGame(data.gameId)
   }
-  ws.send(JSON.stringify(response));
+}
+
+function startGame(gameId: number) {
+  const game = games.find((g) => g.gameId === gameId) as IGamesData;
+  wss.clients.forEach((ws) => {
+    const responseData = JSON.stringify({
+      ships: game.players[0].ships,
+      currentPlayerIndex: game.currentPlayer
+    })
+    const response = {
+      type: "start_game",
+      data: responseData,
+      id: 0,
+    }
+    ws.send(JSON.stringify(response));
+  })
 }
 
 function attack(ws: WebSocket, data: IAttack) {
