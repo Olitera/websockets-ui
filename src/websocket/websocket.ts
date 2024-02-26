@@ -1,7 +1,7 @@
 import { WebSocketServer, WebSocket } from 'ws'
 import { IPlayerLogin } from '../interfaces/player-data';
 import { IRoom, IRoomIndex } from '../interfaces/room-data';
-import { IAttack, IGameShips, IShip, IShipsData } from '../interfaces/ships-data';
+import { IAttack, IGameShips, IShip } from '../interfaces/ships-data';
 import { IGamePlayer, IGamesData } from '../interfaces/games-data';
 import { IWinsData } from '../interfaces/wins-data';
 
@@ -45,6 +45,7 @@ wss.on('connection', (ws) => {
         break
       case 'attack':
         attack(ws, JSON.parse(requestData.data));
+        turn(ws, JSON.parse(requestData.data))
         break
       case 'randomAttack':
         break
@@ -204,32 +205,39 @@ function attack(ws: WebSocket, data: IAttack) {
   } else {
     status = 'miss'
   }
-  const responseData = JSON.stringify({
-    position: {
-      x: data.x,
-      y: data.y,
-    },
-    currentPlayer: data.indexPlayer,
-    status
-  })
-  const response = {
-    type: "attack",
-    data: responseData,
-    id: 0,
-  }
-  ws.send(JSON.stringify(response));
+
+  game.players.forEach(player => {
+    const responseData = JSON.stringify({
+      position: {
+        x: data.x,
+        y: data.y,
+      },
+      currentPlayer: data.indexPlayer,
+      status
+    })
+    const response = {
+      type: "attack",
+      data: responseData,
+      id: 0,
+    }
+    wsMap.get(player.playerId)?.send(JSON.stringify(response))
+  });
 }
 
 function turn(ws: WebSocket, data: IAttack) {
-  const responseData = JSON.stringify({
-    currentPlayer: data.indexPlayer
+  const game = games.find((g) => g.gameId === data.gameId) as IGamesData;
+  game.currentPlayer = game.players.find(p => p.playerId !== data.indexPlayer)?.playerId as number;
+  game.players.forEach(player => {
+    const responseData = JSON.stringify({
+      currentPlayer: game.currentPlayer
+    })
+    const response = {
+      type: "turn",
+      data: responseData,
+      id: 0,
+    }
+    wsMap.get(player.playerId)?.send(JSON.stringify(response))
   })
-  const response = {
-    type: "turn",
-    data: responseData,
-    id: 0,
-  }
-  ws.send(JSON.stringify(response))
 }
 
 function finishGame(ws: WebSocket, data: IAttack) {
