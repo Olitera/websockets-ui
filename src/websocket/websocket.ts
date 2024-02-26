@@ -1,7 +1,7 @@
-import { WebSocketServer, WebSocket } from 'ws'
+import { WebSocketServer, WebSocket } from 'ws';
 import { IPlayerLogin } from '../interfaces/player-data';
 import { IRoom, IRoomIndex } from '../interfaces/room-data';
-import { IAttack, IGameShips } from '../interfaces/ships-data';
+import { IAttack, IGameShips, IRandomAttack } from '../interfaces/ships-data';
 import { IGamePlayer, IGamesData } from '../interfaces/games-data';
 import { IWinsData } from '../interfaces/wins-data';
 import { registerPlayer } from '../player';
@@ -16,18 +16,12 @@ const wins: IWinsData[] = [];
 let id = 0;
 const wsMap: Map<number, WebSocket> = new Map();
 
-wss.on('connection', (ws) => {
-  console.log("CONNECTION")
+wss.on('connection', (ws): void => {
   id = id + 1;
-  const userId = id;
+  const userId: number = id;
   wsMap.set(userId, ws);
-  ws.on('message', (data: string) => {
-    // console.log(userId, '@createRoom');
-    // console.log(JSON.parse(data))
-
+  ws.on('message', (data: string): void => {
     const requestData = JSON.parse(data.toString())
-    // console.log(requestData, '@@@@@@@@@@@')
-
     switch (requestData.type) {
       case 'reg':
         registerPlayer(ws, JSON.parse(requestData.data), userId, users);
@@ -47,10 +41,14 @@ wss.on('connection', (ws) => {
         addShips(JSON.parse(requestData.data));
         break
       case 'attack':
-        attack(ws, JSON.parse(requestData.data));
-        turn(ws, JSON.parse(requestData.data))
+        attack(JSON.parse(requestData.data));
+        turn(JSON.parse(requestData.data));
         break
       case 'randomAttack':
+        break
+      case 'finish':
+        finishGame(ws, JSON.parse(requestData.data));
+        updateWinners()
         break
       default:
         break
@@ -58,7 +56,7 @@ wss.on('connection', (ws) => {
   })
 })
 
-function updateWinners() {
+function updateWinners(): void {
   const responseData = JSON.stringify(wins)
   const response = {
     type: "update_winners",
@@ -70,7 +68,7 @@ function updateWinners() {
   })
 }
 
-function createGame(data: IRoomIndex, userId: number) {
+function createGame(data: IRoomIndex, userId: number): void {
   const players: IGamePlayer[] = rooms.find((room => room.roomId === data.indexRoom))?.roomUsers
     .map((p)=> ({playerId: p.index, ships: [], matrix:[]})) as IGamePlayer[]
   games.push({
@@ -78,7 +76,7 @@ function createGame(data: IRoomIndex, userId: number) {
     players,
     currentPlayer: userId
   })
-  console.log(games, '@games');
+  // console.log(games, '@games');
   players.forEach(p=> {
     const responseData = JSON.stringify({
       idGame: games.length,
@@ -93,49 +91,41 @@ function createGame(data: IRoomIndex, userId: number) {
   })
 }
 
-// function createRoom(userId: number) {
-//   const name = users.find(((player)=> player.id === userId))?.name as string;
-//   const room: IRoom = {
-//     roomId: rooms.length + 1, roomUsers: [{ index: userId, name }]
-//   }
-//   rooms.push(room);
-// }
-
-function updateRoom() {
+function updateRoom(): void {
   const responseData = JSON.stringify(rooms)
   const response = {
     type: "update_room",
     data: responseData,
     id: 0,
   }
-  console.log(JSON.stringify(rooms), '@ROOMS')
+  // console.log(JSON.stringify(rooms), '@ROOMS')
   wss.clients.forEach((ws) => {
     ws.send(JSON.stringify(response))
   })
 }
 
-function addUserToRoom(data: IRoomIndex, userId: number) {
+function addUserToRoom(data: IRoomIndex, userId: number): void {
  const user = users.find(u => u.id === userId) as IPlayerLogin;
  const room = rooms.find(r => r.roomId === data.indexRoom) as IRoom;
  if (!room.roomUsers.find(u => u.index === userId)){
    room.roomUsers.push({name: user.name, index: user.id})
  }
- console.log(JSON.stringify(room), userId, '@addUserToRoom')
+ // console.log(JSON.stringify(room), userId, '@addUserToRoom')
 }
 
-function addShips(data: IGameShips) {
+function addShips(data: IGameShips): void {
   const game = games.find((g) => g.gameId === data.gameId) as IGamesData;
   const player = game.players.find(p => p.playerId === data.indexPlayer) as IGamePlayer;
   player.ships = data.ships;
-  console.log(data.indexPlayer, JSON.stringify(player), '@ GAME player')
+  // console.log(data.indexPlayer, JSON.stringify(player), '@ GAME player')
   if(game.players.every(p => {
     return p.ships.length;})) {
-    startGame(data.gameId)
+    startGame(data.gameId);
   }
   player.matrix = createMatrix(data.ships);
 }
 
-function startGame(gameId: number) {
+function startGame(gameId: number): void {
   const game = games.find((g) => g.gameId === gameId) as IGamesData;
   game.players.forEach(p => {
     const responseData = JSON.stringify({
@@ -148,22 +138,9 @@ function startGame(gameId: number) {
       id: 0,
     }
     wsMap.get(p.playerId)?.send(JSON.stringify(response));
-
-  })
-  wss.clients.forEach((ws) => {
-    const responseData = JSON.stringify({
-      ships: game.players[0].ships,
-      currentPlayerIndex: game.currentPlayer
-    })
-    const response = {
-      type: "start_game",
-      data: responseData,
-      id: 0,
-    }
-    ws.send(JSON.stringify(response));
   })
 }
-function attack(ws: WebSocket, data: IAttack) {
+function attack(data: IAttack): void {
   let status = '';
   const game = games.find((g) => g.gameId === data.gameId) as IGamesData;
   const player = game.players.find(p => p.playerId !== data.indexPlayer) as IGamePlayer;
@@ -190,11 +167,14 @@ function attack(ws: WebSocket, data: IAttack) {
   });
 }
 
-function turn(ws: WebSocket, data: IAttack) {
-  const game = games.find((g) => g.gameId === data.gameId) as IGamesData;
+function randomAttack(data: IRandomAttack): void {
+}
+
+function turn(data: IAttack): void {
+  const game: IGamesData = games.find((g) => g.gameId === data.gameId) as IGamesData;
   game.currentPlayer = game.players.find(p => p.playerId !== data.indexPlayer)?.playerId as number;
   game.players.forEach(player => {
-    const responseData = JSON.stringify({
+    const responseData: string = JSON.stringify({
       currentPlayer: game.currentPlayer
     })
     const response = {
@@ -206,16 +186,27 @@ function turn(ws: WebSocket, data: IAttack) {
   })
 }
 
-function finishGame(ws: WebSocket, data: IAttack) {
-  const responseData = JSON.stringify({
-    winPlayer: data.indexPlayer
+function finishGame(ws: WebSocket, data: IAttack): void {
+  const game: IGamesData = games.find((g) => g.gameId === data.gameId) as IGamesData;
+  game.currentPlayer = game.players.find(p => p.playerId === data.indexPlayer)?.playerId as number;
+  const roomPlayerName = rooms.map(r=> {
+     return r.roomUsers.find(u => (u.index === data.indexPlayer))?.name as string
   })
-  const response = {
-    type: "finish",
-    data: responseData,
-    id: 0,
-  }
-  ws.send(JSON.stringify(response))
+  wins.push({
+    name: roomPlayerName[0],
+    wins: wins.length + 1
+  })
+  game.players.forEach(player => {
+    const responseData = JSON.stringify({
+      winPlayer: game.currentPlayer
+    })
+    const response = {
+      type: "finish",
+      data: responseData,
+      id: 0,
+    }
+    wsMap.get(player.playerId)?.send(JSON.stringify(response))
+  })
 }
 
 wss.on('listening', () => {

@@ -1,7 +1,7 @@
 import { IShip } from './interfaces/ships-data';
 
 export function createMatrix(ships: IShip[]): boolean[][] {
-  const gameBoard = Array.from({length: 10}, () => Array(10).fill(false));
+  const gameBoard: boolean[][] = Array.from({length: 10}, () => Array(10).fill(false));
   const coordinates: { x: number, y: number}[] = [];
   ships.forEach(ship => {
     if(ship.direction) {

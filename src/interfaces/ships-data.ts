@@ -30,5 +30,10 @@ export interface IAttack {
   gameId: number,
   x: number,
   y: number,
+  indexPlayer: number,
+}
+
+export interface IRandomAttack {
+  gameId: number,
   indexPlayer: number
 }
