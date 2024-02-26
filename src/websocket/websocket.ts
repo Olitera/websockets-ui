@@ -1,9 +1,12 @@
 import { WebSocketServer, WebSocket } from 'ws'
 import { IPlayerLogin } from '../interfaces/player-data';
 import { IRoom, IRoomIndex } from '../interfaces/room-data';
-import { IAttack, IGameShips, IShip } from '../interfaces/ships-data';
+import { IAttack, IGameShips } from '../interfaces/ships-data';
 import { IGamePlayer, IGamesData } from '../interfaces/games-data';
 import { IWinsData } from '../interfaces/wins-data';
+import { registerPlayer } from '../player';
+import {createMatrix} from '../matrix';
+import { createRoom } from '../room';
 
 const wss = new WebSocketServer({port: 3000});
 const users: IPlayerLogin[] = [];
@@ -27,12 +30,12 @@ wss.on('connection', (ws) => {
 
     switch (requestData.type) {
       case 'reg':
-        registerPlayer(ws, JSON.parse(requestData.data), userId);
+        registerPlayer(ws, JSON.parse(requestData.data), userId, users);
         updateRoom()
         updateWinners();
         break;
       case 'create_room':
-        createRoom(userId);
+        createRoom(userId, users, rooms);
         updateRoom();
         break
       case 'add_user_to_room':
@@ -54,23 +57,6 @@ wss.on('connection', (ws) => {
     }
   })
 })
-
-function registerPlayer(ws: WebSocket, data: IPlayerLogin, userId: number) {
-  data.id = userId;
-  users.push(data)
-  const responseData = JSON.stringify({
-    name: data.name,
-    index: data.id,
-    error: false,
-    errorText: ''
-  },)
-  const response = {
-    type: "reg",
-      data: responseData,
-    id: 0,
-  }
-  ws.send(JSON.stringify(response))
-}
 
 function updateWinners() {
   const responseData = JSON.stringify(wins)
@@ -107,13 +93,13 @@ function createGame(data: IRoomIndex, userId: number) {
   })
 }
 
-function createRoom(userId: number) {
-  const name = users.find(((player)=> player.id === userId))?.name as string;
-  const room: IRoom = {
-    roomId: rooms.length + 1, roomUsers: [{ index: userId, name }]
-  }
-  rooms.push(room);
-}
+// function createRoom(userId: number) {
+//   const name = users.find(((player)=> player.id === userId))?.name as string;
+//   const room: IRoom = {
+//     roomId: rooms.length + 1, roomUsers: [{ index: userId, name }]
+//   }
+//   rooms.push(room);
+// }
 
 function updateRoom() {
   const responseData = JSON.stringify(rooms)
@@ -177,25 +163,6 @@ function startGame(gameId: number) {
     ws.send(JSON.stringify(response));
   })
 }
-
-function createMatrix(ships: IShip[]): boolean[][] {
-  const gameBoard = Array.from({length: 10}, () => Array(10).fill(false));
-  const coordinates: { x: number, y: number}[] = [];
-  ships.forEach(ship => {
-    if(ship.direction) {
-      for(let y = 0; y < ship.length; y++) {
-        coordinates.push({x: ship.position.x, y: y + ship.position.y })
-      }
-    } else {
-      for(let x = 0; x < ship.length; x++) {
-        coordinates.push({x: x + ship.position.x, y: ship.position.y})
-      }
-    }
-  })
-  coordinates.forEach(coordinate => gameBoard[coordinate.x][coordinate.y] = true);
-  return gameBoard
-}
-
 function attack(ws: WebSocket, data: IAttack) {
   let status = '';
   const game = games.find((g) => g.gameId === data.gameId) as IGamesData;
@@ -205,7 +172,6 @@ function attack(ws: WebSocket, data: IAttack) {
   } else {
     status = 'miss'
   }
-
   game.players.forEach(player => {
     const responseData = JSON.stringify({
       position: {
