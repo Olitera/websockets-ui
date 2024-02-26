@@ -1,7 +1,7 @@
 import { WebSocketServer, WebSocket } from 'ws'
 import { IPlayerLogin } from '../interfaces/player-data';
 import { IRoom, IRoomIndex } from '../interfaces/room-data';
-import { IAttack, IGameShips } from '../interfaces/ships-data';
+import { IAttack, IGameShips, IShip, IShipsData } from '../interfaces/ships-data';
 import { IGamePlayer, IGamesData } from '../interfaces/games-data';
 import { IWinsData } from '../interfaces/wins-data';
 
@@ -19,7 +19,7 @@ wss.on('connection', (ws) => {
   const userId = id;
   wsMap.set(userId, ws);
   ws.on('message', (data: string) => {
-    console.log(userId, '@createRoom');
+    // console.log(userId, '@createRoom');
     // console.log(JSON.parse(data))
 
     const requestData = JSON.parse(data.toString())
@@ -44,7 +44,9 @@ wss.on('connection', (ws) => {
         addShips(JSON.parse(requestData.data));
         break
       case 'attack':
-        attack(ws, requestData.data);
+        attack(ws, JSON.parse(requestData.data));
+        break
+      case 'randomAttack':
         break
       default:
         break
@@ -83,7 +85,7 @@ function updateWinners() {
 
 function createGame(data: IRoomIndex, userId: number) {
   const players: IGamePlayer[] = rooms.find((room => room.roomId === data.indexRoom))?.roomUsers
-    .map((p)=> ({playerId: p.index, ships: []})) as IGamePlayer[]
+    .map((p)=> ({playerId: p.index, ships: [], matrix:[]})) as IGamePlayer[]
   games.push({
     gameId: games.length + 1,
     players,
@@ -136,19 +138,31 @@ function addUserToRoom(data: IRoomIndex, userId: number) {
 
 function addShips(data: IGameShips) {
   const game = games.find((g) => g.gameId === data.gameId) as IGamesData;
-  // console.log(game, data, games, '@@@@@game')
   const player = game.players.find(p => p.playerId === data.indexPlayer) as IGamePlayer;
   player.ships = data.ships;
   console.log(data.indexPlayer, JSON.stringify(player), '@ GAME player')
-
   if(game.players.every(p => {
     return p.ships.length;})) {
     startGame(data.gameId)
   }
+  player.matrix = createMatrix(data.ships);
 }
 
 function startGame(gameId: number) {
   const game = games.find((g) => g.gameId === gameId) as IGamesData;
+  game.players.forEach(p => {
+    const responseData = JSON.stringify({
+      ships: p.ships,
+      currentPlayerIndex: p.playerId
+    })
+    const response = {
+      type: "start_game",
+      data: responseData,
+      id: 0,
+    }
+    wsMap.get(p.playerId)?.send(JSON.stringify(response));
+
+  })
   wss.clients.forEach((ws) => {
     const responseData = JSON.stringify({
       ships: game.players[0].ships,
@@ -163,14 +177,40 @@ function startGame(gameId: number) {
   })
 }
 
+function createMatrix(ships: IShip[]): boolean[][] {
+  const gameBoard = Array.from({length: 10}, () => Array(10).fill(false));
+  const coordinates: { x: number, y: number}[] = [];
+  ships.forEach(ship => {
+    if(ship.direction) {
+      for(let y = 0; y < ship.length; y++) {
+        coordinates.push({x: ship.position.x, y: y + ship.position.y })
+      }
+    } else {
+      for(let x = 0; x < ship.length; x++) {
+        coordinates.push({x: x + ship.position.x, y: ship.position.y})
+      }
+    }
+  })
+  coordinates.forEach(coordinate => gameBoard[coordinate.x][coordinate.y] = true);
+  return gameBoard
+}
+
 function attack(ws: WebSocket, data: IAttack) {
+  let status = '';
+  const game = games.find((g) => g.gameId === data.gameId) as IGamesData;
+  const player = game.players.find(p => p.playerId !== data.indexPlayer) as IGamePlayer;
+  if (player.matrix[data.x][data.y]) {
+    status = 'shot'
+  } else {
+    status = 'miss'
+  }
   const responseData = JSON.stringify({
     position: {
       x: data.x,
       y: data.y,
     },
     currentPlayer: data.indexPlayer,
-    status: "miss"
+    status
   })
   const response = {
     type: "attack",
@@ -178,6 +218,30 @@ function attack(ws: WebSocket, data: IAttack) {
     id: 0,
   }
   ws.send(JSON.stringify(response));
+}
+
+function turn(ws: WebSocket, data: IAttack) {
+  const responseData = JSON.stringify({
+    currentPlayer: data.indexPlayer
+  })
+  const response = {
+    type: "turn",
+    data: responseData,
+    id: 0,
+  }
+  ws.send(JSON.stringify(response))
+}
+
+function finishGame(ws: WebSocket, data: IAttack) {
+  const responseData = JSON.stringify({
+    winPlayer: data.indexPlayer
+  })
+  const response = {
+    type: "finish",
+    data: responseData,
+    id: 0,
+  }
+  ws.send(JSON.stringify(response))
 }
 
 wss.on('listening', () => {

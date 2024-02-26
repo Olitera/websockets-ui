@@ -8,5 +8,6 @@ export interface IGamesData {
 
 export interface IGamePlayer {
   playerId: number,
-  ships: IShip[]
+  ships: IShip[],
+  matrix: boolean[][]
 }
